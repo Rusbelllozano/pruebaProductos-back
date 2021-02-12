@@ -5,7 +5,7 @@ const bodyParser = require('body-parser');
 var cors = require('cors');
 
 // use it before all route definitions
-app.use(cors({origin: 'http://localhost:8080'}));
+app.use(cors({origin: '*'}));
 const mongoose = require('mongoose')
 mongoose.Promise = global.Promise;
 mongoose.connect('mongodb+srv://user-test:datos123W@cluster0.jvxbf.mongodb.net/ProductsTest?retryWrites=true&w=majority',{
