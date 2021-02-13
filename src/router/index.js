@@ -2,7 +2,60 @@ const express = require("express");
 const router = express.Router();
 const path = require('path');
 const faker = require('faker');
-const Product = require('../models/index.js')
+const Product = require('../models/index.js');
+const { query } = require("express");
+
+function escapeRegex(text) {
+  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+};
+class APIfeatures{
+  constructor(query,queryString){
+    this.query = query;
+    this.queryString = queryString
+  }
+  filtering(){
+    const queryobj = {...this.queryString};
+    const excludedfields =['page','sort','limit']
+    excludedfields.forEach(el=>delete queryobj[el]);
+    let querystr = JSON.stringify(queryobj)
+    querystr = querystr.replace(
+      /\b(gte|gt|lt|lte)\b/g,
+      match => `$${match}`)
+    this.query.find(JSON.parse(querystr))
+    return this
+  }
+  sorting(){
+    if(this.queryString.sort){
+      const sortBy = this.queryString.sort.split(',').join(' ');
+      this.query = this.query.sort(sortBy)
+    }else{
+      this.query = this.query.sort('-name');
+    }
+    return this
+  }
+  paginating(){
+    const page = this.queryString.page *1 || 1;
+    const limit = this.queryString.limit * 1||5;
+    const skip = (page-1) * limit;
+    this.query = this.query.skip(skip).limit(limit)
+    return this
+    
+  }
+}
+
+router.get('/products',async(req,res)=>{
+  try {
+    const features =new APIfeatures(Product.find(),req.query).filtering().sorting().paginating()
+    const products = await features.query;
+    res.status(200).json({
+      'status':"200",
+      'results':products.length,
+      products
+    })
+  } catch (error) {
+    
+  }
+})
 router.get("/hola", function (req, res) {
   res.sendFile(path.join(__dirname + "/../views/index.html"));
 });
@@ -15,151 +68,6 @@ router.get('/get_all_categories',(req, res, next) => {
   })
 
 })
-router.get('/products', (req, res, next) => {
-  let options ={
-    sort:{
-      price:0
-    }
-  }
-  let filter = {
-    
-  }
-  var noMatch = null;
-  let perPage = 9
-  let page = req.query.page || 1
-  options.skip = (perPage * page) - perPage
-  options.limit = perPage
-
-if(req.query.category && req.query.search){
-  filter.$and=[
-    {category:req.query.category?req.query.category:''},
-    {name:req.query.search ? new RegExp(escapeRegex(req.query.search), 'gi'):""}
-  ]
-}else{
-  filter.$or=[
-    {category:req.query.category?req.query.category:''},
-    {name:req.query.search ? new RegExp(escapeRegex(req.query.search), 'gi'):""}
-  ]
-}
-if(req.query.sort){
-  options.sort.price = req.query.sort
-}
-
-// if(req.query.search){
-//   filter.name = new RegExp(escapeRegex(req.query.search), 'gi');
-// }
-// if(req.query.category){
-//   filter.category = req.query.category
-// }
-console.log(filter)
-console.log(options)
-Product
-      .find(filter,null,options).exec((err, products) => {
-        Product.count((err, count) => {
-          if (err) {
-            return next(err);
-          }else {
-            if (products.length < 1) {
-              noMatch = "No Products match that query, please try again.";
-            }
-            return res.send({
-              products,
-              noMatch: noMatch,
-              currentPage: page,
-              pages: Math.ceil(count / perPage)
-            })
-          }
-        })
-      })
 
 
-
-
-  // if (req.query.search) {
-  //   const regex = new RegExp(escapeRegex(req.query.search), 'gi');
-  //   Product
-  //     .find({ name: regex }).skip((perPage * page) - perPage).limit(perPage).exec((err, products) => {
-  //       Product.count((err, count) => {
-  //         if (err) {
-  //           return next(err);
-  //         }else {
-  //           if (products.length < 1) {
-  //             noMatch = "No Products match that query, please try again.";
-  //           }
-  //           return res.send({
-  //             products,
-  //             noMatch: noMatch,
-  //             currentPage: page,
-  //             pages: Math.ceil(count / perPage)
-  //           })
-  //         }
-  //       })
-  //     })
-  // } else if(req.query.sort){
-  //   let sort = req.query.sort
-  //   Product
-  //     .find({ }).sort({
-  //       price:sort
-  //     }).skip((perPage * page) - perPage).limit(perPage).exec((err, products) => {
-  //       Product.count((err, count) => {
-  //         if (err) {
-  //           return next(err);
-  //         }else {
-  //           if (products.length < 1) {
-  //             noMatch = "No Products match that query, please try again.";
-  //           }
-  //           return res.send({
-  //             products,
-  //             noMatch: noMatch,
-  //             currentPage: page,
-  //             pages: Math.ceil(count / perPage)
-  //           })
-  //         }
-  //       })
-  //     })
-  // }else if(req.query.category){
-  //   Product
-  //     .find({ category:req.query.category}).then((products)=>{
-  //       return res.send({
-  //         products,
-  //         currentPage: 1,
-  //         pages: 1
-  //       })
-  //     })
-  // }else {
-  //   Product
-  //     .find({}).skip((perPage * page) - perPage).limit(perPage).exec((err, products) => {
-  //       Product.count((err, count) => {
-  //         if (err) {
-  //           return next(err);
-  //         }
-  //         return res.send({
-  //           products,
-  //           currentPage: page,
-  //           pages: Math.ceil(count / perPage)
-  //         })
-  //       })
-  //     })
-  // }
-
-})
-
-// router.get('/generate-fake-data', (req, res) =>{
-// for (let index = 0; index < 9; index++) {
-//   const product = new Product();
-//   product.category = faker.commerce.department()
-//   product.name = faker.commerce.productName()
-//   product.price = faker.commerce.price()
-//   product.cover = faker.image.image()
-//   product.save(err =>{
-//     if(err){
-//       return next(err)
-//     }
-//   })
-
-// } 
-
-function escapeRegex(text) {
-  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-};
 module.exports = router;
